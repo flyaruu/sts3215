@@ -26,65 +26,65 @@ pub enum ServoError {
     StatusError(u8),
 }
 
-pub fn read_temperature<'a, P: Write + Read>(
+pub fn read_temperature<P: Write + Read>(
     port: &mut P,
-    buffer: &'a mut [u8],
+    buffer: &mut [u8],
     servo_id: u8,
 ) -> Result<u8, ServoError> {
     read_u8_register(port, buffer, servo_id, TEMPERATURE_REGISTER)
 }
 
-pub fn read_voltage<'a, P: Write + Read>(
+pub fn read_voltage<P: Write + Read>(
     port: &mut P,
-    buffer: &'a mut [u8],
+    buffer: &mut [u8],
     servo_id: u8,
 ) -> Result<u8, ServoError> {
     read_u8_register(port, buffer, servo_id, VOLTAGE_REGISTER)
 }
 
-pub fn is_moving<'a, P: Write + Read>(
+pub fn is_moving<P: Write + Read>(
     port: &mut P,
-    buffer: &'a mut [u8],
+    buffer: &mut [u8],
     servo_id: u8,
 ) -> Result<bool, ServoError> {
     read_u8_register(port, buffer, servo_id, MOVING_REGISTER).map(|value| value != 0)
 }
 
-pub fn has_error<'a, P: Write + Read>(
+pub fn has_error<P: Write + Read>(
     port: &mut P,
-    buffer: &'a mut [u8],
+    buffer: &mut [u8],
     servo_id: u8,
 ) -> Result<bool, ServoError> {
     read_u8_register(port, buffer, servo_id, ERROR_REGISTER).map(|value| value != 0)
 }
 
-pub fn read_position<'a, P: Write + Read>(
+pub fn read_position<P: Write + Read>(
     port: &mut P,
-    buffer: &'a mut [u8],
+    buffer: &mut [u8],
     servo_id: u8,
 ) -> Result<u16, ServoError> {
     read_u16_register(port, buffer, servo_id, POSITION_REGISTER)
 }
 
-pub fn read_speed<'a, P: Write + Read>(
+pub fn read_speed<P: Write + Read>(
     port: &mut P,
-    buffer: &'a mut [u8],
+    buffer: &mut [u8],
     servo_id: u8,
 ) -> Result<u16, ServoError> {
     read_u16_register(port, buffer, servo_id, SPEED_REGISTER)
 }
 
-pub fn read_load<'a, P: Write + Read>(
+pub fn read_load<P: Write + Read>(
     port: &mut P,
-    buffer: &'a mut [u8],
+    buffer: &mut [u8],
     servo_id: u8,
 ) -> Result<u16, ServoError> {
     read_u16_register(port, buffer, servo_id, LOAD_REGISTER)
 }
 
-pub fn read_u8_register<'a, P: Write + Read>(
+pub fn read_u8_register<P: Write + Read>(
     port: &mut P,
-    buffer: &'a mut [u8],
+    buffer: &mut [u8],
     servo_id: u8,
     register_id: u8,
 ) -> Result<u8, ServoError> {
@@ -97,9 +97,9 @@ pub fn read_u8_register<'a, P: Write + Read>(
         )))
 }
 
-pub fn read_u16_register<'a, P: Write + Read>(
+pub fn read_u16_register<P: Write + Read>(
     port: &mut P,
-    buffer: &'a mut [u8],
+    buffer: &mut [u8],
     servo_id: u8,
     register_id: u8,
 ) -> Result<u16, ServoError> {
@@ -112,9 +112,9 @@ pub fn read_u16_register<'a, P: Write + Read>(
         )))
 }
 
-pub fn enable_torque<'a, P: Write + Read>(
+pub fn enable_torque<P: Write + Read>(
     port: &mut P,
-    buffer: &'a mut [u8],
+    buffer: &mut [u8],
     servo_id: u8,
 ) -> Result<(), ServoError> {
     let torque_enable_addr = 0x30;
@@ -124,9 +124,9 @@ pub fn enable_torque<'a, P: Write + Read>(
         .and_then(|response| response.is_error())
 }
 
-pub fn disable_torque<'a, P: Write + Read>(
+pub fn disable_torque<P: Write + Read>(
     port: &mut P,
-    buffer: &'a mut [u8],
+    buffer: &mut [u8],
     servo_id: u8,
 ) -> Result<(), ServoError> {
     let torque_enable_addr = 0x30;
@@ -137,9 +137,9 @@ pub fn disable_torque<'a, P: Write + Read>(
 }
 
 
-pub fn move_to_position<'a, P: Write + Read>(
+pub fn move_to_position<P: Write + Read>(
     port: &mut P,
-    buffer: &'a mut [u8],
+    buffer: &mut [u8],
     servo_id: u8,
     position: u16,
     time: Option<u16>,
@@ -148,9 +148,9 @@ pub fn move_to_position<'a, P: Write + Read>(
     write_position(port, buffer, servo_id, position, time, accel)?.is_error()
 }
 
-pub fn ping_servo<'a, P: Write + Read>(
+pub fn ping_servo<P: Write + Read>(
     port: &mut P,
-    buffer: &'a mut [u8],
+    buffer: &mut [u8],
     servo_id: u8,
 ) -> Result<(), ServoError> {
     send_ping(port, buffer, servo_id)?.is_error()

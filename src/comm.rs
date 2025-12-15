@@ -64,8 +64,8 @@ impl<'cmd> Command<'cmd> {
             let value = buffer[index];
             counter = counter.wrapping_add(value);
         }
-        let inverted = !counter & 0xff;
-        inverted
+        
+        !counter
     }
 
     pub(crate) fn send_command<'a, P: Write + Read>(
@@ -75,9 +75,9 @@ impl<'cmd> Command<'cmd> {
     ) -> Result<CommandResponse<'a>, ServoError> {
         let index = self.write_buffer(buffer);
         port.write_all(&buffer[..index])
-            .map_err(|e| ServoError::WriteError(e))?;
+            .map_err(ServoError::WriteError)?;
         // info!("Command buffer: {:?}", &buffer[..index]);
-        let read_count = port.read(buffer).map_err(|e| ServoError::WriteError(e))?;
+        let read_count = port.read(buffer).map_err(ServoError::WriteError)?;
         let response = CommandResponse::parse_response(&buffer[..read_count]).unwrap();
         Ok(response)
     }
@@ -137,7 +137,7 @@ impl<'a> CommandResponse<'a> {
     }
 
     pub(crate) fn data_as_u8(&self) -> Option<u8> {
-        if self.data.len() >= 1 {
+        if !self.data.is_empty() {
             Some(self.data[0])
             // let low = self.data[0] as u16;
             // let high = self.data[1] as u16;
@@ -159,7 +159,6 @@ pub fn send_ping<'a, P: Write + Read>(
 ) -> Result<CommandResponse<'a>, ServoError> {
     Command::Ping(servo_id)
         .send_command(port, buffer)
-        .map_err(|e| e.into())
 }
 
 pub fn write_position<'a, P: Write + Read>(

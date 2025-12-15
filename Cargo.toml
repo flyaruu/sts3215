@@ -7,4 +7,4 @@ edition = "2024"
 env_logger = "0.11.8"
 log = "0.4.29"
 serialport = "4.8.1"
-thiserror = "2.0.17"
+thiserror = {version="2.0.17", default-features = false}

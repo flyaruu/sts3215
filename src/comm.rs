@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use embedded_io::{Read, Write};
 
 use log::info;
 
@@ -75,10 +75,12 @@ impl<'cmd> Command<'cmd> {
     ) -> Result<CommandResponse<'a>, ServoError> {
         let index = self.write_buffer(buffer);
         port.write_all(&buffer[..index])
-            .map_err(ServoError::WriteError)?;
+            .map_err(|_| ServoError::WriteError)?;
         // info!("Command buffer: {:?}", &buffer[..index]);
-        let read_count = port.read(buffer).map_err(ServoError::WriteError)?;
-        let response = CommandResponse::parse_response(&buffer[..read_count]).unwrap();
+        let read_count = port.read(buffer).map_err(|_| ServoError::ReadError)?;
+        let response = CommandResponse::parse_response(&buffer[..read_count])
+            .ok_or(ServoError::ResponseParseError)?;
+        
         Ok(response)
     }
 }
@@ -128,9 +130,6 @@ impl<'a> CommandResponse<'a> {
     pub(crate) fn data_as_u16(&self) -> Option<u16> {
         if self.data.len() >= 2 {
             Some(u16::from_le_bytes(self.data[0..2].try_into().ok()?))
-            // let low = self.data[0] as u16;
-            // let high = self.data[1] as u16;
-            // Some((high << 8) | low)
         } else {
             None
         }
@@ -139,16 +138,9 @@ impl<'a> CommandResponse<'a> {
     pub(crate) fn data_as_u8(&self) -> Option<u8> {
         if !self.data.is_empty() {
             Some(self.data[0])
-            // let low = self.data[0] as u16;
-            // let high = self.data[1] as u16;
-            // Some((high << 8) | low)
         } else {
             None
         }
-    }
-
-    pub(crate) fn id(&self) -> u8 {
-        self._id
     }
 }
 
@@ -169,14 +161,20 @@ pub fn write_position<'a, P: Write + Read>(
     time: Option<u16>,
     accel: Option<u16>,
 ) -> Result<CommandResponse<'a>, ServoError> {
-    let mut data = vec![];
-    data.extend_from_slice(&position.to_le_bytes());
+    let mut data = [0u8; 6];
+    let mut len = 0;
+    
+    data[0..2].copy_from_slice(&position.to_le_bytes());
+    len += 2;
+    
     if let Some(t) = time {
-        data.extend_from_slice(&t.to_le_bytes());
+        data[len..len+2].copy_from_slice(&t.to_le_bytes());
+        len += 2;
     }
     if let Some(a) = accel {
-        data.extend_from_slice(&a.to_le_bytes());
+        data[len..len+2].copy_from_slice(&a.to_le_bytes());
+        len += 2;
     }
 
-    Command::Write(servo_id, GOAL_POSITION_REGISTER, &data).send_command(port, buffer)
+    Command::Write(servo_id, GOAL_POSITION_REGISTER, &data[..len]).send_command(port, buffer)
 }

@@ -1,11 +1,14 @@
-use core::result::Result;
-use std::io::{Read, Write};
+#![cfg_attr(not(feature = "std"), no_std)]
+
+use embedded_io::{Read, Write};
 
 use crate::comm::{
     Command, ERROR_REGISTER, LOAD_REGISTER, MOVING_REGISTER, POSITION_REGISTER, SPEED_REGISTER, TEMPERATURE_REGISTER, VOLTAGE_REGISTER, send_ping, write_position
 };
 
 mod comm;
+
+pub mod info;
 
 // const REG_WRITE_ID: u8 = 0x04;
 // const ACTION_ID: u8 = 0x05;
@@ -16,14 +19,14 @@ mod comm;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ServoError {
-    #[error("Serial port error: {0}")]
-    SerialPortError(#[from] serialport::Error),
-    #[error("Serial port write error: {0}")]
-    WriteError(std::io::Error),
-    #[error("Serial port read error: {0}")]
-    ReadError(std::io::Error),
+    #[error("Serial port write error")]
+    WriteError,
+    #[error("Serial port read error")]
+    ReadError,
     #[error("Servo returned error status: {0}")]
     StatusError(u8),
+    #[error("Failed to parse servo response")]
+    ResponseParseError
 }
 
 pub fn read_temperature<P: Write + Read>(
@@ -91,10 +94,7 @@ pub fn read_u8_register<P: Write + Read>(
     let result = Command::Read(servo_id, register_id, 1).send_command(port, buffer)?;
     result
         .data_as_u8()
-        .ok_or(ServoError::SerialPortError(serialport::Error::new(
-            serialport::ErrorKind::InvalidInput,
-            "Insufficient data length",
-        )))
+        .ok_or(ServoError::ReadError)
 }
 
 pub fn read_u16_register<P: Write + Read>(
@@ -106,10 +106,7 @@ pub fn read_u16_register<P: Write + Read>(
     let result = Command::Read(servo_id, register_id, 2).send_command(port, buffer)?;
     result
         .data_as_u16()
-        .ok_or(ServoError::SerialPortError(serialport::Error::new(
-            serialport::ErrorKind::InvalidInput,
-            "Insufficient data length",
-        )))
+        .ok_or(ServoError::ReadError)
 }
 
 pub fn enable_torque<P: Write + Read>(

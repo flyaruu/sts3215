@@ -9,13 +9,15 @@ const READ_DATA_ID: u8 = 0x02;
 const WRITE_DATA_ID: u8 = 0x03;
 
 pub const GOAL_POSITION_REGISTER: u8 = 0x2A;
+
 pub const POSITION_REGISTER: u8 = 0x38;
 pub const SPEED_REGISTER: u8 = 0x3a;
 pub const LOAD_REGISTER: u8 = 0x3c;
 pub const VOLTAGE_REGISTER: u8 = 0x3e;
-pub const TEMPERATURE_REGISTER: u8 = 0x3f;
-pub const MOVING_REGISTER: u8 = 0x41;
-pub const ERROR_REGISTER: u8 = 0x42;
+pub const TEMPERATURE_REGISTER: u8 = 0x3f; // ok
+pub const STATUS_REGISTER: u8 = 0x41;
+pub const MOVING_REGISTER: u8 = 0x42;
+pub const CURRENT_REGISTER: u8 = 0x43;
 
 pub(crate) enum Command<'a> {
     Ping(u8),
@@ -64,7 +66,7 @@ impl<'cmd> Command<'cmd> {
             let value = buffer[index];
             counter = counter.wrapping_add(value);
         }
-        
+
         !counter
     }
 
@@ -78,10 +80,7 @@ impl<'cmd> Command<'cmd> {
             .map_err(|_| ServoError::WriteError)?;
         // info!("Command buffer: {:?}", &buffer[..index]);
         let read_count = port.read(buffer).map_err(|_| ServoError::ReadError)?;
-        let response = CommandResponse::parse_response(&buffer[..read_count])
-            .ok_or(ServoError::ResponseParseError)?;
-        
-        Ok(response)
+        CommandResponse::parse_response(&buffer[..read_count])
     }
 }
 
@@ -93,11 +92,11 @@ pub(crate) struct CommandResponse<'a> {
 }
 
 impl<'a> CommandResponse<'a> {
-    fn parse_response(buffer: &'a [u8]) -> Option<CommandResponse<'a>> {
+    fn parse_response(buffer: &'a [u8]) -> Result<CommandResponse<'a>, ServoError> {
         // info!("Parsing response buffer: {:x?}", buffer);
         if buffer[0] != 0xFF || buffer[1] != 0xFF {
             info!("Invalid header");
-            return None; // Invalid header
+            return Err(ServoError::InvalidHeader(buffer[0], buffer[1])); // Invalid header
         }
 
         let id = buffer[2];
@@ -109,10 +108,15 @@ impl<'a> CommandResponse<'a> {
 
         if !calculated_checksum == checksum {
             info!("Checksum mismatch");
-            return None; // Checksum mismatch
+            return Err(ServoError::ChecksumMismatch(calculated_checksum, checksum)); // Checksum mismatch
         }
+
         let data = &buffer[5..5 + length - 2];
-        Some(Self { _id: id, status, data })
+        Ok(Self {
+            _id: id,
+            status,
+            data,
+        })
     }
 
     pub(crate) fn is_ok(&self) -> bool {
@@ -142,6 +146,10 @@ impl<'a> CommandResponse<'a> {
             None
         }
     }
+
+    pub(crate) fn status(&self) -> u8 {
+        self.status
+    }
 }
 
 pub fn send_ping<'a, P: Write + Read>(
@@ -149,8 +157,7 @@ pub fn send_ping<'a, P: Write + Read>(
     buffer: &'a mut [u8],
     servo_id: u8,
 ) -> Result<CommandResponse<'a>, ServoError> {
-    Command::Ping(servo_id)
-        .send_command(port, buffer)
+    Command::Ping(servo_id).send_command(port, buffer)
 }
 
 pub fn write_position<'a, P: Write + Read>(
@@ -163,16 +170,16 @@ pub fn write_position<'a, P: Write + Read>(
 ) -> Result<CommandResponse<'a>, ServoError> {
     let mut data = [0u8; 6];
     let mut len = 0;
-    
+
     data[0..2].copy_from_slice(&position.to_le_bytes());
     len += 2;
-    
+
     if let Some(t) = time {
-        data[len..len+2].copy_from_slice(&t.to_le_bytes());
+        data[len..len + 2].copy_from_slice(&t.to_le_bytes());
         len += 2;
     }
     if let Some(a) = accel {
-        data[len..len+2].copy_from_slice(&a.to_le_bytes());
+        data[len..len + 2].copy_from_slice(&a.to_le_bytes());
         len += 2;
     }
 

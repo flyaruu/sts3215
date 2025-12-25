@@ -3,12 +3,16 @@
 use embedded_io::{Read, Write};
 
 use crate::comm::{
-    Command, ERROR_REGISTER, LOAD_REGISTER, MOVING_REGISTER, POSITION_REGISTER, SPEED_REGISTER, TEMPERATURE_REGISTER, VOLTAGE_REGISTER, send_ping, write_position
+    CURRENT_REGISTER, Command, LOAD_REGISTER, MOVING_REGISTER, POSITION_REGISTER, SPEED_REGISTER,
+    STATUS_REGISTER, TEMPERATURE_REGISTER, VOLTAGE_REGISTER, send_ping, write_position,
 };
 
 mod comm;
 
+#[cfg(feature = "ui")]
 pub mod info;
+
+pub mod robot;
 
 // const REG_WRITE_ID: u8 = 0x04;
 // const ACTION_ID: u8 = 0x05;
@@ -26,7 +30,11 @@ pub enum ServoError {
     #[error("Servo returned error status: {0}")]
     StatusError(u8),
     #[error("Failed to parse servo response")]
-    ResponseParseError
+    ResponseParseError,
+    #[error("Invalid header bytes: {0:#X}, {1:#X}")]
+    InvalidHeader(u8, u8),
+    #[error("Checksum mismatch: calculated {0:#X}, received {1:#X}")]
+    ChecksumMismatch(u8, u8),
 }
 
 pub fn read_temperature<P: Write + Read>(
@@ -45,6 +53,14 @@ pub fn read_voltage<P: Write + Read>(
     read_u8_register(port, buffer, servo_id, VOLTAGE_REGISTER)
 }
 
+pub fn read_current<P: Write + Read>(
+    port: &mut P,
+    buffer: &mut [u8],
+    servo_id: u8,
+) -> Result<u16, ServoError> {
+    read_u16_register(port, buffer, servo_id, CURRENT_REGISTER)
+}
+
 pub fn is_moving<P: Write + Read>(
     port: &mut P,
     buffer: &mut [u8],
@@ -58,7 +74,7 @@ pub fn has_error<P: Write + Read>(
     buffer: &mut [u8],
     servo_id: u8,
 ) -> Result<bool, ServoError> {
-    read_u8_register(port, buffer, servo_id, ERROR_REGISTER).map(|value| value != 0)
+    read_u8_register(port, buffer, servo_id, STATUS_REGISTER).map(|value| value != 0)
 }
 
 pub fn read_position<P: Write + Read>(
@@ -92,9 +108,7 @@ pub fn read_u8_register<P: Write + Read>(
     register_id: u8,
 ) -> Result<u8, ServoError> {
     let result = Command::Read(servo_id, register_id, 1).send_command(port, buffer)?;
-    result
-        .data_as_u8()
-        .ok_or(ServoError::ReadError)
+    result.data_as_u8().ok_or(ServoError::ReadError)
 }
 
 pub fn read_u16_register<P: Write + Read>(
@@ -104,9 +118,7 @@ pub fn read_u16_register<P: Write + Read>(
     register_id: u8,
 ) -> Result<u16, ServoError> {
     let result = Command::Read(servo_id, register_id, 2).send_command(port, buffer)?;
-    result
-        .data_as_u16()
-        .ok_or(ServoError::ReadError)
+    result.data_as_u16().ok_or(ServoError::ReadError)
 }
 
 pub fn enable_torque<P: Write + Read>(
@@ -133,7 +145,6 @@ pub fn disable_torque<P: Write + Read>(
         .and_then(|response| response.is_error())
 }
 
-
 pub fn move_to_position<P: Write + Read>(
     port: &mut P,
     buffer: &mut [u8],
@@ -151,7 +162,6 @@ pub fn ping_servo<P: Write + Read>(
     servo_id: u8,
 ) -> Result<(), ServoError> {
     send_ping(port, buffer, servo_id)?.is_error()
-    
 }
 
 #[cfg(test)]

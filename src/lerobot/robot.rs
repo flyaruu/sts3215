@@ -195,6 +195,10 @@ impl Robot {
         Ok(port)
     }
 
+    pub fn servo_state(&self) -> &ServoState<6> {
+        &self.servo_state
+    }
+
     pub fn move_to_position(
         &mut self,
         servo_id: u8,

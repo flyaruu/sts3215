@@ -2,6 +2,16 @@
 name = "sts3215"
 version = "0.0.1"
 edition = "2024"
+authors = ["Frank Lyaruu <flyaruu@gmail.com>"]
+license = "MIT OR Apache-2.0"
+description = "A no_std compatible library for controlling STS3215 serial servo motors with embedded-io support"
+repository = "https://github.com/flyaruu/sts3215"
+homepage = "https://github.com/flyaruu/sts3215"
+documentation = "https://docs.rs/sts3215"
+keywords = ["servo", "robotics", "embedded", "no-std", "sts3215"]
+categories = ["embedded", "hardware-support", "no-std"]
+readme = "README.md"
+rust-version = "1.85"
 
 [features]
 default = ["std", "ui"]

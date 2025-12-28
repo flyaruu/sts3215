@@ -14,7 +14,7 @@ use embedded_io_adapters::std::FromStd;
 use log::info;
 use ratatui::prelude::*;
 use serialport::{DataBits, FlowControl, Parity, SerialPort, StopBits};
-use sts3215::info::{ServoState, ui};
+use sts3215::{info::ui, lerobot::robot::ServoState};
 
 const MAX_BUFFER_SIZE: usize = 256;
 
@@ -41,7 +41,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut buffer = [0u8; MAX_BUFFER_SIZE];
 
-    let serialport: Box<dyn SerialPort> = create_servo_port("/dev/cu.wchusbserial5AAF2182201")?;
+    let serialport: Box<dyn SerialPort> = create_servo_port("/dev/cu.wchusbserial5AAF2185891")?;
 
     // Wrap the serial port with the embedded-io adapter
     let mut port = FromStd::new(serialport);

@@ -12,7 +12,7 @@ mod comm;
 #[cfg(feature = "ui")]
 pub mod info;
 
-pub mod robot;
+pub mod lerobot;
 
 // const REG_WRITE_ID: u8 = 0x04;
 // const ACTION_ID: u8 = 0x05;

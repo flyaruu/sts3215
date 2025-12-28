@@ -8,7 +8,7 @@ The lerobot builds a general 'Robot' struct which owns a SerialPort, a buffer an
 
 The comm module does the actual reading and writing to the serial port, it uses the embedded-io traits for no-std compatibility, and converts it into std Read/Write traits using the embedded-io-adapters crate.
 
-For reference, check [[this document|https://files.waveshare.com/upload/2/27/Communication_Protocol_User_Manual-EN%28191218-0923%29.pdf]]
+For reference, check [this document](https://files.waveshare.com/upload/2/27/Communication_Protocol_User_Manual-EN%28191218-0923%29.pdf)
 
 Note: **I haven't tried running it in no-std mode**
 

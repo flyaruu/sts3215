@@ -1,8 +1,9 @@
+use embedded_io::{Read, Write};
 use ratatui::{prelude::*, widgets::*};
 
-use crate::lerobot::robot::ServoState;
+use crate::lerobot::robot::Robot;
 
-pub fn ui<const N: usize>(f: &mut Frame, servo_state: &ServoState<N>) {
+pub fn render_tui<PORT: Read + Write>(f: &mut Frame, robot: &Robot<PORT>, selected_index: usize) {
     let area = f.area();
 
     // Create the table header
@@ -20,13 +21,14 @@ pub fn ui<const N: usize>(f: &mut Frame, servo_state: &ServoState<N>) {
     ])
     .style(Style::default().fg(Color::Yellow).bold());
 
+    let servo_state = robot.servo_state();
     // Create table rows from servo data with selection highlighting
     let rows: Vec<Row> = servo_state
         .infos
         .iter()
         .enumerate()
         .map(|(index, info)| {
-            let is_selected = index == servo_state.selected_index;
+            let is_selected = index == selected_index;
             let row = Row::new(vec![
                 Cell::from(info.id.to_string()),
                 Cell::from(info.position.to_string()),
@@ -83,21 +85,4 @@ pub fn ui<const N: usize>(f: &mut Frame, servo_state: &ServoState<N>) {
     .style(Style::default().fg(Color::White));
 
     f.render_widget(table, area);
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::info::ServoState;
-
-    #[test]
-    fn it_works() {
-        let mut state = ServoState::new(&[1]);
-        state.infos[0].position = 100;
-        state.move_position(-90);
-        assert_eq!(state.infos[0].position, 10);
-        state.move_position(-20);
-        assert_eq!(state.infos[0].position, 4086);
-        state.move_position(20);
-        assert_eq!(state.infos[0].position, 10);
-    }
 }

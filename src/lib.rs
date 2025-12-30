@@ -35,6 +35,10 @@ pub enum ServoError {
     InvalidHeader(u8, u8),
     #[error("Checksum mismatch: calculated {0:#X}, received {1:#X}")]
     ChecksumMismatch(u8, u8),
+    #[error("Command overflow")]
+    CommandOverflow,
+    #[error("IO Error")]
+    IOError,
 }
 
 pub fn read_temperature<P: Write + Read>(
@@ -150,10 +154,10 @@ pub fn move_to_position<P: Write + Read>(
     buffer: &mut [u8],
     servo_id: u8,
     position: u16,
-    time: Option<u16>,
-    accel: Option<u16>,
+    speed: Option<u16>,
+    acc: Option<u16>,
 ) -> Result<(), ServoError> {
-    write_position(port, buffer, servo_id, position, time, accel)?.is_error()
+    write_position(port, buffer, servo_id, position, speed, acc)?.is_error()
 }
 
 pub fn ping_servo<P: Write + Read>(

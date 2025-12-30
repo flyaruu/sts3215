@@ -10,11 +10,15 @@ The comm module does the actual reading and writing to the serial port, it uses 
 
 For reference, check [this document](https://files.waveshare.com/upload/2/27/Communication_Protocol_User_Manual-EN%28191218-0923%29.pdf)
 
-Note: **I haven't tried running it in no-std mode**
+Note: **I haven't tried running it in no-std mode**, it does compile on an esp32 project. 
+  head....id..ln.inst..1...2...3...4...5...6...7...8
+ [ff, ff, 01, 09, 03, 2a, 20, 03, e8, fd, 10, 27, 89]
 
-
-
+## 2a20
+## 03e8
+## 
 
 
 ### Future work
-- It queries all aspects of a servo separately (i.e. the read_servo_info function). I guess this is inefficient, it would be quicker to query all the relevant registers at once and parse it into a ServoState structure
+- It queries all aspects of a servo separately (i.e. the read_servo_info function). I guess this is inefficient, it would be quicker to query all the relevant registers at once and parse it into a ServoState structure.
+- Does it make sense to use async? Perhaps for no_std it makes sense as we do not have threads.

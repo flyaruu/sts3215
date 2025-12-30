@@ -1,8 +1,4 @@
-use core::time::Duration;
-
-use embedded_io_adapters::std::FromStd;
 use log::info;
-use serialport::{DataBits, FlowControl, Parity, SerialPort, StopBits};
 
 use crate::{
     ServoError,
@@ -19,8 +15,8 @@ use embedded_io::{Read, Write};
 pub struct ServoPositionCommand {
     pub id: u8,
     pub position: u16,
-    pub time: Option<u16>,
-    pub accel: Option<u16>,
+    pub speed: Option<u16>,
+    pub acc: Option<u16>,
 }
 #[derive(Default, Debug, Clone, Copy)]
 pub struct ServoInfo {
@@ -37,11 +33,10 @@ pub struct ServoInfo {
 }
 
 #[derive(Debug)]
-pub struct ServoState<const N: usize> {
-    pub infos: [ServoInfo; N],
-    pub servo_ids: [u8; N],
-    pub selected_index: usize,
-    pub queued_commands: Vec<ServoPositionCommand>,
+pub struct ServoState<const SERVO_COUNT: usize, const COMMAND_QUEUE_SIZE: usize = 16> {
+    pub infos: [ServoInfo; SERVO_COUNT],
+    pub servo_ids: [u8; SERVO_COUNT],
+    pub queued_commands: heapless::Vec<ServoPositionCommand,COMMAND_QUEUE_SIZE>,
 }
 
 impl<const N: usize> ServoState<N> {
@@ -49,10 +44,10 @@ impl<const N: usize> ServoState<N> {
         Self {
             servo_ids: servo_ids.clone(),
             infos: [ServoInfo::default(); N],
-            selected_index: 0,
-            queued_commands: Vec::new(),
+            queued_commands: heapless::Vec::new(),
         }
     }
+
 
     pub fn update<P: Read + Write>(&mut self, port: &mut P, buffer: &mut [u8]) {
         for (index, &id) in self.servo_ids.iter().enumerate() {
@@ -62,37 +57,30 @@ impl<const N: usize> ServoState<N> {
         }
     }
 
-    pub fn select_next(&mut self) {
-        if self.selected_index < N.saturating_sub(1) {
-            self.selected_index += 1;
-        }
+    pub fn send_absolute_move_command(&mut self, servo_index: u8, position: u16, speed: Option<u16>, acc: Option<u16>)->Result<(), ServoError> {
+        let servo_id = self.servo_ids[servo_index as usize];
+        self.infos[servo_index as usize].goal_position = position;
+        self.queued_commands.push(ServoPositionCommand {
+            id: servo_id,
+            position,
+            speed,
+            acc,
+        }).map_err(|_| ServoError::CommandOverflow)        
     }
-
-    pub fn select_previous(&mut self) {
-        if self.selected_index > 0 {
-            self.selected_index -= 1;
-        }
-    }
-
-    pub fn selected_servo_id(&self) -> u8 {
-        self.servo_ids[self.selected_index]
-    }
-
-    pub fn move_position(&mut self, delta: i16) {
-        let id = self.selected_servo_id();
-        let index = self.selected_index;
-        let new_position = self.infos[index].goal_position as i16 + delta;
-        self.infos[index].goal_position = new_position.rem_euclid(4096) as u16;
+    pub fn send_relative_move_command(&mut self, servo_index: u8, delta: i16, speed: Option<u16>, acc: Option<u16>)->Result<(), ServoError> {
+        let servo_id = self.servo_ids[servo_index as usize];
+        let new_position = self.infos[servo_index as usize].goal_position as i16 + delta;
+        self.infos[servo_index as usize].goal_position = new_position.rem_euclid(4096) as u16;
         info!(
             "Queued position command for servo {}: new_position={}",
-            id, self.infos[index].goal_position
+            servo_id, self.infos[servo_index as usize].goal_position
         );
         self.queued_commands.push(ServoPositionCommand {
-            id,
-            position: self.infos[index].goal_position,
-            time: None,
-            accel: None,
-        });
+            id: servo_id,
+            position: self.infos[servo_index as usize].goal_position,
+            speed: speed,
+            acc: acc,
+        }).map_err(|_| ServoError::CommandOverflow)
     }
 
     pub fn process_queued_commands<P: Read + Write>(
@@ -106,12 +94,12 @@ impl<const N: usize> ServoState<N> {
                 buffer,
                 command.id,
                 command.position,
-                command.time,
-                command.accel,
+                command.speed,
+                command.acc,
             )?;
             info!(
-                "Sent position command to servo {}: position={}, time={:?}, accel={:?}",
-                command.id, command.position, command.time, command.accel
+                "Sent position command to servo {}: position={}, speed={:?}, acc={:?}",
+                command.id, command.position, command.speed, command.acc
             );
             if response.is_ok() {
                 Ok(())
@@ -119,6 +107,7 @@ impl<const N: usize> ServoState<N> {
                 Err(ServoError::StatusError(response.status()))
             }
         } else {
+            info!("No queued commands to process.");
             Ok(())
         }
     }
@@ -163,15 +152,14 @@ fn read_servo_info<P: Read + Write>(
     })
 }
 
-pub struct Robot {
-    port: Box<dyn SerialPort>,
+pub struct Robot<PORT: Read + Write> {
+    port: PORT,
     servo_state: ServoState<6>,
     buffer: [u8; 256],
 }
 
-impl Robot {
-    pub fn  new(port_name: &str) -> Result<Self, serialport::Error> {
-        let port = Self::create_servo_port(port_name)?;
+impl <PORT: Read + Write>Robot<PORT> {
+    pub fn  new(port: PORT) -> Result<Self, ServoError> {
         let servo_ids = [1u8, 2, 3, 4, 5, 6];
         let state = ServoState::new(&servo_ids);
         let buffer = [0u8; 256];
@@ -182,19 +170,29 @@ impl Robot {
         })
     }
 
-    fn create_servo_port(port_name: &str) -> Result<Box<dyn SerialPort>, serialport::Error> {
-        let port = serialport::new(port_name, 1_000_000)
-            .timeout(Duration::from_millis(1000))
-            .data_bits(DataBits::Eight)
-            .stop_bits(StopBits::One)
-            .parity(Parity::None)
-            .flow_control(FlowControl::None)
-            .open()?;
-
-        info!("Port opened successfully: {}", port_name);
-        Ok(port)
+    #[cfg(feature = "std")]
+    pub fn new_std_robot(port_name: &str) ->Result<Robot<embedded_io_adapters::std::FromStd<Box<dyn serialport::SerialPort>>>, ServoError> {
+        super::std::new_std_robot(port_name)
     }
 
+    pub fn send_absolute_move_command(&mut self, servo_index: u8, position: u16, time: Option<u16>, accel: Option<u16>)->Result<(), ServoError> {
+        self.servo_state.send_absolute_move_command(servo_index, position, time, accel)
+    }
+    pub fn send_relative_move_command(&mut self, servo_id: u8, delta: i16, time: Option<u16>, accel: Option<u16>)->Result<(), ServoError> {
+        self.servo_state.send_relative_move_command(servo_id, delta, time, accel)
+    }
+
+    pub fn process_queued_commands(
+        &mut self,
+    ) -> Result<(), ServoError> {
+        self.servo_state.process_queued_commands(&mut self.port, &mut self.buffer)
+    }
+
+    pub fn update_servo_state(&mut self)->Result<(),ServoError> {
+        self.servo_state.update(&mut self.port, &mut self.buffer);
+        Ok(())
+    }
+    
     pub fn servo_state(&self) -> &ServoState<6> {
         &self.servo_state
     }
@@ -203,32 +201,29 @@ impl Robot {
         &mut self,
         servo_id: u8,
         position: u16,
-        time: Option<u16>,
-        accel: Option<u16>,
+        speed: Option<u16>,
+        acc: Option<u16>,
     ) -> Result<(), ServoError> {
         // let prt = &mut *self.port;
-        let mut adapter = FromStd::new(&mut *self.port);
 
         write_position(
-            &mut adapter,
+            &mut self.port,
             &mut self.buffer,
             servo_id,
             position,
-            time,
-            accel,
+            speed,
+            acc,
         )?
         .is_error()
     }
 
     pub fn ping_servo(&mut self, servo_id: u8) -> Result<(), ServoError> {
-        let mut adapter = FromStd::new(&mut *self.port);
-        send_ping(&mut adapter, &mut self.buffer, servo_id)?.is_error()
+        send_ping(&mut self.port, &mut self.buffer, servo_id)?.is_error()
     }
 
     pub fn read_temperature(&mut self, servo_id: u8) -> Result<u8, ServoError> {
-        let mut adapter = FromStd::new(&mut *self.port);
         read_u8_register(
-            &mut adapter,
+            &mut self.port,
             &mut self.buffer,
             servo_id,
             TEMPERATURE_REGISTER,
@@ -236,24 +231,20 @@ impl Robot {
     }
 
     pub fn read_voltage(&mut self, servo_id: u8) -> Result<u8, ServoError> {
-        let mut adapter = FromStd::new(&mut *self.port);
-        read_u8_register(&mut adapter, &mut self.buffer, servo_id, VOLTAGE_REGISTER)
+        read_u8_register(&mut self.port, &mut self.buffer, servo_id, VOLTAGE_REGISTER)
     }
 
     pub fn read_current(&mut self, servo_id: u8) -> Result<u16, ServoError> {
-        let mut adapter = FromStd::new(&mut *self.port);
-        read_u16_register(&mut adapter, &mut self.buffer, servo_id, CURRENT_REGISTER)
+        read_u16_register(&mut self.port, &mut self.buffer, servo_id, CURRENT_REGISTER)
     }
 
     pub fn is_moving(&mut self, servo_id: u8) -> Result<bool, ServoError> {
-        let mut adapter = FromStd::new(&mut *self.port);
-        read_u8_register(&mut adapter, &mut self.buffer, servo_id, MOVING_REGISTER)
+        read_u8_register(&mut self.port, &mut self.buffer, servo_id, MOVING_REGISTER)
             .map(|value| value != 0)
     }
 
     pub fn has_error(&mut self, servo_id: u8) -> Result<bool, ServoError> {
-        let mut adapter = FromStd::new(&mut *self.port);
-        read_u8_register(&mut adapter, &mut self.buffer, servo_id, STATUS_REGISTER)
+        read_u8_register(&mut self.port, &mut self.buffer, servo_id, STATUS_REGISTER)
             .map(|value| value != 0)
     }
 
@@ -266,13 +257,11 @@ impl Robot {
     }
 
     pub fn read_speed(&mut self, servo_id: u8) -> Result<u16, ServoError> {
-        let mut adapter = FromStd::new(&mut *self.port);
-        read_u16_register(&mut adapter, &mut self.buffer, servo_id, SPEED_REGISTER)
+        read_u16_register(&mut self.port, &mut self.buffer, servo_id, SPEED_REGISTER)
     }
 
     pub fn read_load(&mut self, servo_id: u8) -> Result<u16, ServoError> {
-        let mut adapter = FromStd::new(&mut *self.port);
-        read_u16_register(&mut adapter, &mut self.buffer, servo_id, LOAD_REGISTER)
+        read_u16_register(&mut self.port, &mut self.buffer, servo_id, LOAD_REGISTER)
     }
 
     // Robot related methods would go here
